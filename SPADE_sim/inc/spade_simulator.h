@@ -26,4 +26,7 @@ private:
     CacheSim cache;
     std::vector<SpadePE> pes;
     TileScheduler* scheduler;
+
+    uint64_t active_pe_slots = 0;   // 处于 COMPUTING 状态的周期总和
+    uint64_t total_macs_done = 0;   // 总共完成的有效乘加运算数
 };

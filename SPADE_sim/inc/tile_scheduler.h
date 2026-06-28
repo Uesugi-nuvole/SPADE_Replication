@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <queue>
+#include <list>
 #include "spade_pe.h"
 
 class TileScheduler {
@@ -18,7 +19,7 @@ public:
 
 private:
     std::vector<SpadePE>& pe_array;
-    std::queue<SpadeTile> pending_tiles;
+    std::list<SpadeTile> pending_tiles;
     
     // 用于 SpMM 写回冲突的 Barrier 控制 (防止多个 PE 竞争写同一行)
     std::vector<bool> row_locks; 

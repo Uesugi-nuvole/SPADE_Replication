@@ -24,8 +24,9 @@ public:
     // 获取当前的内存延迟模拟 (用于拖慢 PE 的状态机)
     int get_memory_latency(int bytes_needed, bool bypass, bool use_victim);
 
-private:
     CacheStats stats;
+private:
+
     // 简化的容量与 LRU 状态追踪（后续完善）
     int current_l2_usage;
     int current_victim_usage;

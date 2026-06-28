@@ -49,8 +49,8 @@ int main() {
 
     std::cout << "[Mini-SPADE] Loading Cora Graph Tiles Metadata...\n";
     std::vector<SpadeTile> workload = load_spade_workload(
-    "C:/Users/Lenovo/Desktop/SOFTMAX-PE/SPADE_RE/data/spade_tiles/metadata.txt", 
-    "C:/Users/Lenovo/Desktop/SOFTMAX-PE/SPADE_RE/data/spade_tiles"
+    "C:/Users/Lenovo/Desktop/SOFTMAX-PE/SPADE_RE/spade_sim/data/spade_tiles/metadata.txt", 
+    "C:/Users/Lenovo/Desktop/SOFTMAX-PE/SPADE_RE/spade_sim/data/spade_tiles"
 );
 
     if (workload.empty()) {
@@ -70,3 +70,4 @@ int main() {
     sim.print_final_report();
     return 0;
 }
+

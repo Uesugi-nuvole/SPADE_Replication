@@ -1,40 +1,38 @@
-// cache_sim.cpp
+//cache_sim.cpp
 #include "../inc/cache_sim.h"
 #include <iostream>
+#include <cstdlib>
+#include "../configs/config.h" 
 
 CacheSim::CacheSim() : current_l2_usage(0), current_victim_usage(0) {}
 
 int CacheSim::get_memory_latency(int bytes_needed, bool bypass, bool use_victim) {
-    // 假设硬件参数 (时钟周期)
-    const int L2_LATENCY = 10;
-    const int VICTIM_LATENCY = 3;   // Victim Cache 离执行单元极近
-    const int DRAM_LATENCY = 150;   // 昂贵的主存访问
-
-    if (bypass) {
-        stats.dram_accesses++;
-        return DRAM_LATENCY;
-    }
 
     if (use_victim) {
         // 简化的概率命中模型：Victim Cache 专用于 R-Matrix 小工作集，命中率极高
-        // 实际硬件中是靠硬件地址映射，这里我们用 90% 命中率近似
-        if (rand() % 100 < 90) { 
+        if (rand() % 100 < config::VICTIM_CACHE_HIT_RATE) { 
             stats.victim_hits++;
-            return VICTIM_LATENCY;
+            return config::VICTIM_CACHE_LATENCY;
         } else {
             stats.dram_accesses++;
-            return DRAM_LATENCY;
+            return config::DRAM_LATENCY;
         }
     }
+    
+    if (bypass) {
+        stats.dram_accesses++;
+        return config::DRAM_LATENCY;
+    }
 
-    // 默认 L2 Cache 访问
-    if (rand() % 100 < 60) { // 如果不使用 bypass/victim，普通 L2 命中率设为 60%
+
+    //  L2 Cache 访问
+    if (rand() % 100 < config::L2_CACHE_HIT_RATE) { // 如果不使用 bypass/victim，普通 L2 命中率设为 config::L2_CACHE_HIT_RATE
         stats.l2_hits++;
-        return L2_LATENCY;
+        return config::L2_CACHE_LATENCY;
     } else {
         stats.l2_misses++;
         stats.dram_accesses++;
-        return DRAM_LATENCY;
+        return config::DRAM_LATENCY;
     }
 }
 
@@ -75,7 +73,7 @@ std::vector<SpadeTile> load_spade_workload(const std::string& metadata_path, con
     bool bcl, bcr, vtc;
 
     while (meta_file >> id >> rs >> rn >> cs >> cn >> nnz >> bcl >> bcr >> vtc) {
-        SpadeTile tile{id, rs, rn, cs, cn, nnz, bcr, bcl, vtc};
+        SpadeTile tile{id, rs, rn, cs, cn, nnz, bcl, bcr, vtc};
 
         // 读取具体的 COO 数据 (这里虽然算力仿真没直接算值，但保持工程完整)
         std::ifstream data_file(tile_dir + "/tile_" + std::to_string(id) + ".txt");
@@ -125,60 +123,10 @@ int main() {
     return 0;
 }
 
-//spadd_pe.cpp
-#include "../inc/spade_pe.h"
-#include "../inc/cache_sim.h"
-#include "../configs/config.h"
-#include <iostream>
-
-SpadePE::SpadePE(int id, CacheSim* cache) 
-    : pe_id(id), shared_cache(cache), idle(true), compute_cycles_left(0), state(PEState::IDLE) {}
-
-void SpadePE::assign_tile(const SpadeTile& tile) {
-    current_tile = tile;
-    idle = false;
-    
-    // 1. 计算访存延迟： 左矩阵(Spade) + 右矩阵(Dense)
-    int lat_l = shared_cache->get_memory_latency(current_tile.nnz * 12, current_tile.bypass_cache_c, false);
-    int lat_r = shared_cache->get_memory_latency(current_tile.col_num * 4, current_tile.bypass_cache_r, current_tile.use_victim_cache);
-    
-    // 取最大访存延迟作为 Fetch 阶段准备时间 (简化模型)
-    compute_cycles_left = std::max(lat_l, lat_r);
-    state = PEState::FETCHING_DATA;
-}
-
-void SpadePE::tick() {
-    if (state == PEState::IDLE) return;
-
-    if (state == PEState::FETCHING_DATA) {
-        compute_cycles_left--;
-        if (compute_cycles_left <= 0) {
-            // 2. Fetch 完成，切入计算。一个 PE 每个周期可以执行 MACS_PER_PE 次乘加
-            compute_cycles_left = (current_tile.nnz / config::MACS_PER_PE) + 1;
-            state = PEState::COMPUTING;
-        }
-    } 
-    else if (state == PEState::COMPUTING) {
-        compute_cycles_left--;
-        if (compute_cycles_left <= 0) {
-            // SPADE 中处理完毕后即可进入 IDLE（写入主存冲突已由 Scheduler Barrier 挡住）
-            state = PEState::IDLE;
-            idle = true; 
-        }
-    }
-}
-
-bool SpadePE::is_idle() const {
-    return idle;
-}
-
-const SpadeTile& SpadePE::get_current_tile() const {
-    return current_tile;
-}
-
-//spade_simulator.cpp
+//spade_silmulator.cpp
 #include "../inc/spade_simulator.h"
 #include <iostream>
+#include <iomanip>
 
 SpadeSimulator::SpadeSimulator() : global_cycles(0) {
     // 根据 config 初始化 PE 阵列，并统筹连入 Cache
@@ -203,8 +151,10 @@ void SpadeSimulator::tick() {
     // 驱动所有计算单元并行演进时钟
     for (auto& pe : pes) {
         pe.tick();
+        if (pe.is_computing()) {
+            active_pe_slots++;
     }
-    
+}
     global_cycles++;
 }
 
@@ -212,15 +162,45 @@ bool SpadeSimulator::is_finished() const {
     return scheduler->all_done();
 }
 
+
 void SpadeSimulator::print_final_report() const {
-    std::cout << "\n========= SPADE Simulation Complete =========\n";
-    std::cout << "  Configuration      : " << config::NUM_PES << " PEs" << std::endl;
-    std::cout << "  Total Clock Cycles : " << global_cycles << std::endl;
-    cache.print_stats();
-    std::cout << "=============================================\n";
+    // 1. 利用率与工作情况计算
+    // 理论上阵列全负荷能提供的 PE Slot 总数
+    uint64_t total_pe_slots = global_cycles * config::NUM_PES; 
+    double utilization = (total_pe_slots == 0) ? 0.0 : 
+                         (static_cast<double>(active_pe_slots) / total_pe_slots) * 100.0;
+                         
+    // 2. 带宽体积计算
+    // 总搬运体积 = 请求次数 * (每次请求传输的数据块大小)
+    double dram_volume_mb = (cache.stats.dram_accesses * config::CACHE_LINE_SIZE) / (1024.0 * 1024.0);
+    double l2_volume_mb   = (cache.stats.l2_hits * config::CACHE_LINE_SIZE) / (1024.0 * 1024.0);
+    
+    // 平均每周期完成的有效 MAC 运算数
+    double avg_throughput = (static_cast<double>(active_pe_slots) * config::MACS_PER_PE) / (global_cycles == 0 ? 1 : global_cycles);
+
+    std::cout << "\n===================================================\n";
+    std::cout << "        SPADE Simulator Performance Report         \n";
+    std::cout << "===================================================\n";
+    std::cout << "[Architecture Configuration]\n";
+    std::cout << "  PE Array Size       : " << config::NUM_PES << " PEs\n";
+    std::cout << "  Physical MAC Width  : " << config::MACS_PER_PE << " MACs/PE (aligned with logic)\n";
+    std::cout << "  Cache Line Size     : " << config::CACHE_LINE_SIZE << " Bytes\n\n";
+
+    std::cout << "[Execution & Utilization]\n";
+    std::cout << "  Total Clock Cycles  : " << global_cycles << "\n";
+    std::cout << "  Active PE slots     : " << active_pe_slots << "\n";
+    std::cout << "  Total PE slots      : " << total_pe_slots << "\n";
+    std::cout << "  PE Utilization      : " << std::fixed << std::setprecision(2) << utilization << " %\n";
+    std::cout << "  Avg Throughput      : " << std::fixed << std::setprecision(2) << avg_throughput << " MACs/clk\n\n";
+
+    std::cout << "[Memory Hierarchy Network Traffic]\n";
+    std::cout << "  Victim Cache Hits   : " << cache.stats.victim_hits << " (Bypass intercept)\n";
+    std::cout << "  L2 SRAM Hits        : " << cache.stats.l2_hits << " (Traffic: " << std::fixed << std::setprecision(3) << l2_volume_mb << " MB)\n";
+    std::cout << "  DRAM Accesses       : " << cache.stats.dram_accesses << " (Traffic: " << std::fixed << std::setprecision(3) << dram_volume_mb << " MB)\n";
+    std::cout << "===================================================\n";
 }
 
-//tile_simulator.cpp
+//tile_schedulor.cpp
 #include "../inc/tile_scheduler.h"
 #include <iostream>
 #include <algorithm>

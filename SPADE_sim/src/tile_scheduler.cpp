@@ -9,13 +9,12 @@ TileScheduler::TileScheduler(std::vector<SpadePE>& pes) : pe_array(pes) {
 
 void TileScheduler::load_tiles(const std::vector<SpadeTile>& tiles) {
     for (const auto& t : tiles) {
-        pending_tiles.push(t);
+        pending_tiles.push_back(t); // 修复 1：list 使用 push_back
     }
 }
 
 void TileScheduler::tick() {
-    // 1. 解锁已经完成工作的 PE 所占用的行 (由于我们用简单模型，我们遍历所有 PE 的归属即可，不需要精准回调)
-    // 重新校准所有 active 的行，确保 idle 的 PE 释放掉锁
+    // 1. 解锁已经完成工作的 PE 所占用的行
     std::fill(row_locks.begin(), row_locks.end(), false);
     for (auto& pe : pe_array) {
         if (!pe.is_idle()) {
@@ -30,27 +29,33 @@ void TileScheduler::tick() {
     // 2. 尝试给空闲的 PE 派发新任务
     for (auto& pe : pe_array) {
         if (pe.is_idle() && !pending_tiles.empty()) {
-            SpadeTile next_tile = pending_tiles.front();
             
-            // 检查 Barrier (即将要写的行是否被别的 PE 占用)
-            bool barrier_hit = false;
-            for(int i = next_tile.row_start; i < next_tile.row_start + next_tile.row_num; ++i) {
-                if (row_locks[i]) { barrier_hit = true; break; }
-            }
-
-            if (!barrier_hit) {
-                pe.assign_tile(next_tile);
-                pending_tiles.pop(); // 只有没撞锁，才真正派发并弹出
-                
-                // 上锁
-                for(int i = next_tile.row_start; i < next_tile.row_start + next_tile.row_num; ++i) {
-                    row_locks[i] = true;
+            // 遍历未分配的 Tile 列表，寻找第一个不冲突的任务
+            auto it = pending_tiles.begin();
+            while (it != pending_tiles.end()) {
+                bool barrier_hit = false;
+                for(int i = it->row_start; i < it->row_start + it->row_num; ++i) {
+                    if (row_locks[i]) { barrier_hit = true; break; }
                 }
-            } 
-            // 如果撞锁，该 PE 闲着，等下个周期 (或者真实实现中可以在 pending 队列往后找，为了初版简化我们采用 stall 模型)
+
+                if (!barrier_hit) {
+                    // 找到不冲突的，分配给 PE
+                    pe.assign_tile(*it);
+                    
+                    // 立即上锁
+                    for(int i = it->row_start; i < it->row_start + it->row_num; ++i) {
+                        row_locks[i] = true;
+                    }
+                    
+                    pending_tiles.erase(it); // 从列表中移除该任务
+                    break; // 这个 PE 有活干了，退出 while 去给下一个 PE 找活
+                }
+                
+                ++it; // 如果冲突，往后看看有没有别的不冲突的行
+            }
         }
     }
-}
+} // 修复 2：这里补上 tick() 函数缺失的右大括号！
 
 bool TileScheduler::all_done() const {
     if (!pending_tiles.empty()) return false;

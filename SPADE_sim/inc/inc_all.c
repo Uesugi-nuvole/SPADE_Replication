@@ -1,4 +1,4 @@
-//  cache_sim.h
+//cache_sim.h
 #pragma once
 #include <cstdint>
 
@@ -25,15 +25,15 @@ public:
     // 获取当前的内存延迟模拟 (用于拖慢 PE 的状态机)
     int get_memory_latency(int bytes_needed, bool bypass, bool use_victim);
 
-private:
     CacheStats stats;
+private:
+
     // 简化的容量与 LRU 状态追踪（后续完善）
     int current_l2_usage;
     int current_victim_usage;
 };
 
-
-//spade_pe.h  
+//spade_sim.h
 #pragma once
 #include <vector>
 #include <cstdint>
@@ -73,7 +73,10 @@ public:
     bool is_idle() const;
     void clear();
 
-     const SpadeTile& get_current_tile() const;
+    const SpadeTile& get_current_tile() const;
+
+    bool is_computing() const;
+    int get_processed_macs() const; // 用于统计 MACs
 
 private:
     int pe_id;
@@ -96,6 +99,7 @@ private:
 #include "tile_scheduler.h"
 #include "../configs/config.h"
 
+
 class SpadeSimulator {
 public:
     SpadeSimulator();
@@ -116,6 +120,9 @@ private:
     CacheSim cache;
     std::vector<SpadePE> pes;
     TileScheduler* scheduler;
+
+    uint64_t active_pe_slots = 0;   // 处于 COMPUTING 状态的周期总和
+    uint64_t total_macs_done = 0;   // 总共完成的有效乘加运算数
 };
 
 //tile_scheduler.h

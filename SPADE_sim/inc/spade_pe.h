@@ -37,7 +37,10 @@ public:
     bool is_idle() const;
     void clear();
 
-     const SpadeTile& get_current_tile() const;
+    const SpadeTile& get_current_tile() const;
+
+    bool is_computing() const;
+    int get_processed_macs() const; // 用于统计 MACs
 
 private:
     int pe_id;
