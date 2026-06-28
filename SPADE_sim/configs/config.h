@@ -2,27 +2,42 @@
 
 namespace config {
     // ==========================================
+    // 0. 负载分块尺寸参数 (Workload & Tile Dimensions)
+    // Python 预处理脚本依赖这些参数进行图切分
+    // ==========================================
+    constexpr int DEFAULT_TILE_M = 16;   // 稠密矩阵分块行数 (M)
+    constexpr int DEFAULT_TILE_N = 32;   // 稠密矩阵分块列数 (N)
+    constexpr int DEFAULT_HEAD_DIM = 32; // 特征向量维度 (D / Head Dim)
+
+    // ==========================================
     // 1. SPADE 计算架构参数 (Architecture Config)
     // ==========================================
     constexpr int NUM_PES = 16;          // 处理单元数量
-    constexpr int MACS_PER_PE = 8;       // 每个 PE 每周期可执行的乘加次数 (决定计算吞吐)
+    constexpr int MACS_PER_PE = 8;       // 每个 PE 每周期可执行的乘加次数 (吞吐量)
+    
+    // SRAM 容量限制 
+    constexpr int SRAM_CAPACITY_QUERY  = 1024 * 1024;
+    constexpr int SRAM_CAPACITY_KEY    = 1024 * 1024;
+    constexpr int SRAM_CAPACITY_VALUE  = 1024 * 1024;
+    constexpr int SRAM_CAPACITY_OUTPUT = 1024 * 1024;
 
     // ==========================================
     // 2. 存储延迟参数 (Latency in Cycles)
-    // 根据 SPADE 
+    // 典型的 28nm/45nm 硬件 SRAM 和及 HBM/DRAM 设定
     // ==========================================
     constexpr int VICTIM_CACHE_LATENCY = 3;   // SPADE 特有的近端微型缓存 (L1 级别)
     constexpr int L2_CACHE_LATENCY = 10;      // L2 SRAM 延迟
-    constexpr int DRAM_LATENCY = 150;         // 主存 (HBM/DDR) 访问延迟
+    constexpr int DRAM_LATENCY = 150;         // 主存访问延迟
+    constexpr double DRAM_BANDWIDTH_GBPS = 256.0; 
+    constexpr int SYS_FREQ_MHZ = 1000;
 
     // ==========================================
     // 3. 统计学缓存测算模型参数 (Hit Rates)
-    // 为了简化全系统精确跟踪，使用论文测试的平均经验分布
     // ==========================================
-    // Victim Cache 极小但利用率极高，论文中经常达到 90%+ 的拦截率
+    // Victim Cache 极小但利用率高，针对密集侧的重用节点特征
     constexpr int VICTIM_CACHE_HIT_RATE = 95; 
     
-    // 普通 L2 对于不规则图的命中率其实很低，这里先默认 60%，方便对照
+    // 普通 L2 在不规则图遍历中命中率有限，设定为常规经验值
     constexpr int L2_CACHE_HIT_RATE = 60;     
 
 } // namespace config
