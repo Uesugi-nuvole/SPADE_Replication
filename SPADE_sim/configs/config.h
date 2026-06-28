@@ -1,56 +1,28 @@
-/*
-#pragma once
-#include <cstddef>
-
-namespace config {
-    // ====================== 硬件规格参数 (Hardware Specs) ======================
-    // 系统主频 (MHz) 和 DRAM 带宽 (GB/s)
-    constexpr int    SYS_FREQ_MHZ               = 500;
-    constexpr double DRAM_BANDWIDTH_GBPS        = 128.0;
-
-    // ====================== 脉动阵列维度 ======================
-    // 原本写死在 systolic_array.h 的 16x16，在此统一配置
-    constexpr int    ARRAY_ROWS                 = 16;
-    constexpr int    ARRAY_COLS                 = 16;
-
-    // ====================== SRAM 容量配置 ======================
-    // (单位: Bytes, 默认 128KB)
-    constexpr size_t SRAM_CAPACITY_QUERY        = 128 * 1024;
-    constexpr size_t SRAM_CAPACITY_KEY          = 128 * 1024;
-    constexpr size_t SRAM_CAPACITY_VALUE        = 128 * 1024;
-    constexpr size_t SRAM_CAPACITY_OUTPUT       = 128 * 1024;
-
-    // ====================== FIFO 参数 ======================
-    constexpr int    FIFO_DEFAULT_DEPTH         = 64;
-
-    // ====================== 算法与切块 (Tiling) ======================
-    constexpr int    DEFAULT_TILE_M             = 16;
-    constexpr int    DEFAULT_TILE_N             = 16;
-    constexpr int    DEFAULT_HEAD_DIM           = 64;
-
-    // ====================== 调度器流水线周期 ======================
-    // 对应 16x16 阵列的参考值 (Compute 一般为 Head_Dim, Drain 为 Rows+Cols-1)
-    constexpr int    DEFAULT_SDDMM_COMP_CYCLES  = 32;
-    constexpr int    DEFAULT_SDDMM_DRAIN_CYCLES = 31;
-    constexpr int    DEFAULT_SPMM_COMP_CYCLES   = 32;
-    constexpr int    DEFAULT_SPMM_DRAIN_CYCLES  = 31;
-}
-*/
-
 #pragma once
 
 namespace config {
-    // 硬件拓扑配置
-    constexpr int NUM_PES = 16;                 // 初始测试先放 16 个 PE 
-    constexpr int MACS_PER_PE = 16;             // 每个 PE 内部的并行 MAC 数量
+    // ==========================================
+    // 1. SPADE 计算架构参数 (Architecture Config)
+    // ==========================================
+    constexpr int NUM_PES = 16;          // 处理单元数量
+    constexpr int MACS_PER_PE = 8;       // 每个 PE 每周期可执行的乘加次数 (决定计算吞吐)
 
-    // Cache 相关配置 (参考 Intel Ice Lake 架构及论文 BBF 设定)
-    constexpr int L2_CACHE_SIZE_KB = 512;       // 每个 Core 的 L2 Cache
-    constexpr int VICTIM_CACHE_SIZE_KB = 16;    // SPADE 特有的 Victim Cache (用于 rMatrix)
-    constexpr int CACHE_LINE_BYTES = 64;        // 缓存行大小
+    // ==========================================
+    // 2. 存储延迟参数 (Latency in Cycles)
+    // 根据 SPADE 
+    // ==========================================
+    constexpr int VICTIM_CACHE_LATENCY = 3;   // SPADE 特有的近端微型缓存 (L1 级别)
+    constexpr int L2_CACHE_LATENCY = 10;      // L2 SRAM 延迟
+    constexpr int DRAM_LATENCY = 150;         // 主存 (HBM/DDR) 访问延迟
 
-    // 默认的 Tile 切分大小 (在运行时可由 metadata 覆盖，这里作默认参考)
-    constexpr int DEFAULT_TILE_M = 16;
-    constexpr int DEFAULT_TILE_N = 16;
-    constexpr int DEFAULT_TILE_K = 64;
-}
+    // ==========================================
+    // 3. 统计学缓存测算模型参数 (Hit Rates)
+    // 为了简化全系统精确跟踪，使用论文测试的平均经验分布
+    // ==========================================
+    // Victim Cache 极小但利用率极高，论文中经常达到 90%+ 的拦截率
+    constexpr int VICTIM_CACHE_HIT_RATE = 95; 
+    
+    // 普通 L2 对于不规则图的命中率其实很低，这里先默认 60%，方便对照
+    constexpr int L2_CACHE_HIT_RATE = 60;     
+
+} // namespace config

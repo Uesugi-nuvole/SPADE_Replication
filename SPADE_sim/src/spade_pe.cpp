@@ -47,3 +47,4 @@ bool SpadePE::is_idle() const {
 const SpadeTile& SpadePE::get_current_tile() const {
     return current_tile;
 }
+
